@@ -1,0 +1,5 @@
+# WARP registration: contains the account license. Never commit.
+config/
+
+# Local overrides
+docker-compose.override.yml

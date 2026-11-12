@@ -1,0 +1,57 @@
+name: netlify-proxy
+
+services:
+  usque:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: netlify-proxy:local
+    container_name: netlify-proxy
+
+    # Host namespace is mandatory: the TUN device and its routes must land in the
+    # host's network namespace for host processes to use them.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    volumes:
+      # Registration lives on the host only. Read-only at runtime: no secrets
+      # are baked into the image, and the container cannot alter the account.
+      - ./config:/etc/usque:ro
+      # Address list is host-owned so it can be edited without a rebuild.
+      - ./routes:/etc/usque-routes:ro
+
+    command:
+      - -c
+      - /etc/usque/config.json
+      - nativetun
+      - -n
+      - usque
+      - -s
+      - zt-masque.cloudflareclient.com
+      - --on-connect
+      - /usr/local/bin/usque-up.sh
+
+    restart: unless-stopped
+
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD-SHELL", "/sbin/ip link show usque >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

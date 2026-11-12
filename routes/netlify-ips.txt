@@ -1,0 +1,11 @@
+# Netlify CDN edge addresses that are silently blackholed in Egypt.
+# Only these /32s are routed through the tunnel. Everything else stays direct.
+#
+# Re-discover after an outage:
+#   getent ahostsv4 biomejs.dev | awk '{print $1}' | sort -u
+#   dig +short netlify.app A
+#
+# One address per line. '#' starts a comment. Restart with:
+#   docker compose restart
+35.157.26.135
+63.176.8.218
