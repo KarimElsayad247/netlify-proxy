@@ -20,7 +20,9 @@ RUN apk add --no-cache iproute2 ca-certificates
 
 COPY --from=fetch /out/usque /usr/local/bin/usque
 COPY hooks/up.sh /usr/local/bin/usque-up.sh
-RUN chmod 0755 /usr/local/bin/usque /usr/local/bin/usque-up.sh
+RUN chmod 0755 /usr/local/bin/usque /usr/local/bin/usque-up.sh \
+ && [ "$(head -c 2 /usr/local/bin/usque-up.sh)" = '#!' ] \
+ && echo "hook shebang present"
 
 ENV ROUTES_FILE=/etc/usque-routes/netlify-ips.txt
 

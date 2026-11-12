@@ -1,5 +1,8 @@
+#!/bin/sh
 # Purpose: apply per-IP routes for the blackholed Netlify edge addresses to the
 # usque TUN interface. Invoked by usque after every successful tunnel connect.
+#
+# usque execs this file directly (no shell), so the shebang above is mandatory.
 # Runs in the host network namespace, as root, with NET_ADMIN.
 set -eu
 

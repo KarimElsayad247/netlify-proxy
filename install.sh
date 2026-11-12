@@ -48,6 +48,13 @@ fi
 step "building $IMAGE"
 docker compose build
 
+# usque execs the hook via execve, with no shell fallback: a missing shebang
+# fails at runtime with the opaque message "exec format error".
+step "sanity-checking the hook"
+docker run --rm --entrypoint /bin/sh "$IMAGE" \
+    -c 'test "$(head -c 2 /usr/local/bin/usque-up.sh)" = "#!"' \
+    || die "hooks/up.sh is missing a shebang; usque cannot execute it"
+
 # -------------------------------------------------------------- register ----
 mkdir -p config
 chmod 700 config
@@ -76,23 +83,45 @@ done
 ip link show "$IFACE" >/dev/null 2>&1 \
     || die "interface '$IFACE' never appeared; see: docker compose logs"
 
-# ------------------------------------------------------------------ verify ---
-step "verifying routes"
-failed=0
+# --------------------------------------------------- wait for the route hook ---
+# The TUN device exists before the MASQUE handshake finishes, and the route hook
+# only runs after a successful connect. Poll for the routes, not the interface.
+routed_via_iface() {
+    ip route get "$1" 2>/dev/null | head -1 | grep -q "dev $IFACE"
+}
 
+ips=()
 while IFS= read -r line || [ -n "$line" ]; do
     entry="${line%%#*}"
     entry="$(printf '%s' "$entry" | tr -d '[:space:]')"
     [ -n "$entry" ] || continue
     case "$entry" in *[!0-9.]*) continue ;; esac
+    ips+=("$entry")
+done < "$ROUTES_FILE"
+[ "${#ips[@]}" -gt 0 ] || die "no usable addresses found in $ROUTES_FILE"
 
-    if ip route get "$entry" 2>/dev/null | head -1 | grep -q "dev $IFACE"; then
+step "waiting for the route hook"
+for _ in $(seq 1 45); do
+    pending=0
+    for entry in "${ips[@]}"; do
+        routed_via_iface "$entry" || pending=1
+    done
+    [ "$pending" -eq 0 ] && break
+    sleep 1
+done
+
+# ------------------------------------------------------------------ verify ---
+step "verifying routes"
+failed=0
+
+for entry in "${ips[@]}"; do
+    if routed_via_iface "$entry"; then
         printf '  ok    %-16s via %s\n' "$entry" "$IFACE"
     else
         printf '  FAIL  %-16s not routed via %s\n' "$entry" "$IFACE"
         failed=1
     fi
-done < "$ROUTES_FILE"
+done
 
 # Guard against the tunnel ever capturing the default route.
 if ip route show default | grep -q "dev $IFACE"; then
